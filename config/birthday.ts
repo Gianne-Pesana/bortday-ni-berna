@@ -7,7 +7,7 @@ export const BIRTHDAY_CONFIG = {
   // Operational timings
   gameDurationMs: 20000,
   countdownSeconds: 3,
-  gameToResultDelayMs: 1000, // Configurable delay (in ms) before transitioning to results screen
+  gameToResultDelayMs: 2000, // Configurable delay (in ms) before transitioning to results screen
   resultDurationMs: 1500,
   resultButtonLockoutMs: 2000, // Lock results button for 2s to prevent accidental clicks after mashing
 
@@ -22,8 +22,8 @@ export const BIRTHDAY_CONFIG = {
   roastThresholds: [
     { maxTaps: 15, text: "Did you even try?" },
     { maxTaps: 35, text: "A respectable amount of desperation." },
-    { maxTaps: 60, text: "Bro was fighting for her life." },
-    { maxTaps: Infinity, text: "Professional button masher." },
+    { maxTaps: 60, text: "Professional button masher." },
+    { maxTaps: Infinity, text: "Bro was fighting for her life." },
   ] as RoastThreshold[],
 } as const;
 
