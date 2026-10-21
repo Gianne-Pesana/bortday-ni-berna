@@ -1,6 +1,4 @@
 import assert from "node:assert";
-import fs from "node:fs";
-import path from "node:path";
 import { BIRTHDAY_CONFIG, getRoastMessage } from "../config/birthday";
 import { generatePhotoManifest } from "./generate-photo-manifest";
 

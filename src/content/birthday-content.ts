@@ -4,7 +4,7 @@ export const BIRTHDAY_CONTENT = {
     title: "Save Berna's Teenage Years!",
     subtitle: "Before they disappear into the void forever.",
     description:
-      "Berna is turning 20 on October 22, 2026. The sands of youth are slipping through our fingers at catastrophic speed. You have exactly 5 seconds to mash the button and pull her back from the grim reality of adulthood.",
+      "Berna's turning 20. Before she has to start acting like a responsible adult, you have 20 seconds to save her teenage years. Mash the button. Don't ask questions.",
     subtext: "Warning: High-speed button mashing required. Weak thumbs will be judged.",
     startButton: "START RESCUE MISSION",
   },
@@ -28,10 +28,10 @@ export const BIRTHDAY_CONTENT = {
   },
   final: {
     heading: "HAPPY 20TH BIRTHDAY, BERNA! 🎂🎉",
-    tagline: "Teenage mode has been permanently disabled.",
+    tagline: "Welcome to Adulthood",
+    cardHeader: "A Message for You",
     mainParagraph:
       "Jokes aside, I hope this next chapter brings you a lot of good memories, new experiences, and plenty of reasons to be happy. I'm glad I got to be part of your life, and I hope there's a lot more fun ahead.",
-    signoff: "Welcome to adulthood. Good luck. You're going to need it.",
     replayButton: "Try Again (You'll Still Fail)",
   },
 };

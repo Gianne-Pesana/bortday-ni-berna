@@ -40,5 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# generated photo conversions
+# generated photo conversions and optimizations
 public/photos/.converted/
+public/photos/.optimized/

@@ -43,35 +43,103 @@ export function getPhotos(): PhotoManifestItem[] {
   return DEFAULT_FALLBACK_PHOTOS;
 }
 
+// Global in-memory cache to retain decoded image objects
+const memoryImageCache = new Set<HTMLImageElement>();
+let activePreloadPromise: Promise<void> | null = null;
+let loadedCount = 0;
+let isPreloadComplete = false;
+const progressListeners = new Set<(loaded: number, total: number) => void>();
+
+export function arePhotosPreloaded(): boolean {
+  return isPreloadComplete;
+}
+
+export function getPreloadCount(): { loaded: number; total: number; isReady: boolean } {
+  const total = (manifestData as PhotoManifestItem[]).length || DEFAULT_FALLBACK_PHOTOS.length;
+  return {
+    loaded: loadedCount,
+    total,
+    isReady: isPreloadComplete || loadedCount >= total,
+  };
+}
+
+export function subscribePreloadProgress(
+  listener: (loaded: number, total: number) => void
+): () => void {
+  progressListeners.add(listener);
+  return () => progressListeners.delete(listener);
+}
+
 /**
- * Preload all photos before starting the game countdown.
- * Resolves when all images have loaded (or errored), with a safety timeout so gameplay is never blocked.
+ * Preloads and pre-decodes all photos off the main thread.
+ * Starts downloading immediately on site open and caches in memory for 0ms lag during tapping.
  */
-export async function preloadPhotos(photos: PhotoManifestItem[], timeoutMs = 4000): Promise<void> {
-  if (typeof window === "undefined" || photos.length === 0) {
-    return;
+export function preloadPhotos(
+  photos: PhotoManifestItem[],
+  onProgress?: (loaded: number, total: number) => void
+): Promise<void> {
+  if (onProgress) {
+    progressListeners.add(onProgress);
   }
+
+  if (typeof window === "undefined" || photos.length === 0) {
+    isPreloadComplete = true;
+    return Promise.resolve();
+  }
+
+  if (activePreloadPromise) {
+    return activePreloadPromise;
+  }
+
+  const total = photos.length;
+  loadedCount = 0;
 
   const loadPromises = photos.map((item) => {
     return new Promise<void>((resolve) => {
-      // Data URLs don't need network preloading
+      // Data URLs do not require network prefetching
       if (item.src.startsWith("data:")) {
+        loadedCount++;
+        progressListeners.forEach((fn) => fn(loadedCount, total));
         resolve();
         return;
       }
+
       const img = new Image();
-      img.onload = () => resolve();
+      img.onload = async () => {
+        try {
+          // Decode image off the main thread so render has zero latency
+          if ("decode" in img) {
+            await img.decode();
+          }
+          memoryImageCache.add(img);
+        } catch {
+          // Ignore decode error, proceed anyway
+        }
+        loadedCount++;
+        progressListeners.forEach((fn) => fn(loadedCount, total));
+        resolve();
+      };
+
       img.onerror = () => {
         console.warn(`[Photos] Failed to preload image: ${item.src}`);
-        resolve(); // resolve anyway so we don't block
+        loadedCount++;
+        progressListeners.forEach((fn) => fn(loadedCount, total));
+        resolve();
       };
+
       img.src = item.src;
     });
   });
 
+  // Safety maximum timeout of 20 seconds for slow 3G networks, but resolves as soon as images finish
   const timeoutPromise = new Promise<void>((resolve) => {
-    setTimeout(resolve, timeoutMs);
+    setTimeout(resolve, 20000);
   });
 
-  await Promise.race([Promise.all(loadPromises), timeoutPromise]);
+  activePreloadPromise = Promise.race([Promise.all(loadPromises), timeoutPromise]).then(() => {
+    isPreloadComplete = true;
+    progressListeners.forEach((fn) => fn(total, total));
+  });
+
+  return activePreloadPromise;
 }

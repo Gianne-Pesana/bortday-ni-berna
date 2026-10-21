@@ -7,7 +7,9 @@ export const BIRTHDAY_CONFIG = {
   // Operational timings
   gameDurationMs: 20000,
   countdownSeconds: 3,
+  gameToResultDelayMs: 1000, // Configurable delay (in ms) before transitioning to results screen
   resultDurationMs: 1500,
+  resultButtonLockoutMs: 2000, // Lock results button for 2s to prevent accidental clicks after mashing
 
   // Mathematical target
   targetAge: 20,

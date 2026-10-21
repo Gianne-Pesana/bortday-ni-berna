@@ -1,7 +1,14 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { getPhotos, preloadPhotos, PhotoManifestItem } from "@/src/lib/photos";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  getPhotos,
+  preloadPhotos,
+  arePhotosPreloaded,
+  getPreloadCount,
+  subscribePreloadProgress,
+  PhotoManifestItem,
+} from "@/src/lib/photos";
 import { LandingScreen } from "./LandingScreen";
 import { CountdownOverlay } from "./CountdownOverlay";
 import { ActiveGameScreen } from "./ActiveGameScreen";
@@ -15,11 +22,38 @@ export function BirthdayGame() {
   const [photos] = useState<PhotoManifestItem[]>(getPhotos);
   const [isLoadingPhotos, setIsLoadingPhotos] = useState<boolean>(false);
   const [finalTapCount, setFinalTapCount] = useState<number>(0);
+  const [preloadState, setPreloadState] = useState(() => getPreloadCount());
+
+  // Immediately preload & pre-decode all photos upon opening the website
+  useEffect(() => {
+    const unsubscribe = subscribePreloadProgress((loaded, total) => {
+      setPreloadState({
+        loaded,
+        total,
+        isReady: loaded >= total,
+      });
+    });
+
+    preloadPhotos(photos).then(() => {
+      setPreloadState({
+        loaded: photos.length,
+        total: photos.length,
+        isReady: true,
+      });
+    });
+
+    return () => unsubscribe();
+  }, [photos]);
 
   // Handle start from landing screen:
-  // "When the player starts, preload all photos and transition into the countdown.
-  // Do not begin the countdown until the photos are ready."
+  // If photos are already preloaded, transition instantly.
+  // Otherwise wait for the active preload promise to settle.
   const handleStartMission = async () => {
+    if (arePhotosPreloaded() || preloadState.isReady) {
+      setPhase("countdown");
+      return;
+    }
+
     setIsLoadingPhotos(true);
     try {
       await preloadPhotos(photos);
@@ -42,8 +76,8 @@ export function BirthdayGame() {
     setPhase("result");
   }, []);
 
-  // Transition from result screen (1500ms) to final birthday screen
-  const handleResultTimeout = useCallback(() => {
+  // Transition from result screen to final birthday screen
+  const handleResultProceed = useCallback(() => {
     setPhase("final");
   }, []);
 
@@ -61,7 +95,13 @@ export function BirthdayGame() {
 
       {/* Screen flow */}
       {phase === "landing" && (
-        <LandingScreen onStart={handleStartMission} isLoading={isLoadingPhotos} />
+        <LandingScreen
+          onStart={handleStartMission}
+          isLoading={isLoadingPhotos}
+          loadedCount={preloadState.loaded}
+          totalCount={preloadState.total}
+          isReady={preloadState.isReady}
+        />
       )}
 
       {phase === "countdown" && (
@@ -73,7 +113,7 @@ export function BirthdayGame() {
       )}
 
       {phase === "result" && (
-        <ResultScreen tapCount={finalTapCount} onTimeout={handleResultTimeout} />
+        <ResultScreen tapCount={finalTapCount} onProceed={handleResultProceed} />
       )}
 
       {phase === "final" && <FinalBirthdayScreen onReplay={handleReplay} />}

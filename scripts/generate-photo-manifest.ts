@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import exifr from "exifr";
 import heicConvert from "heic-convert";
+import sharp from "sharp";
 
 export interface PhotoManifestItem {
   filename: string;
@@ -21,6 +22,7 @@ const SUPPORTED_EXTENSIONS = new Set([
 
 const PHOTOS_DIR = path.resolve(process.cwd(), "public/photos");
 const CONVERTED_DIR = path.resolve(PHOTOS_DIR, ".converted");
+const OPTIMIZED_DIR = path.resolve(PHOTOS_DIR, ".optimized");
 const OUTPUT_FILE = path.resolve(process.cwd(), "src/lib/photo-manifest.json");
 
 async function extractCaptureDate(filePath: string): Promise<Date | null> {
@@ -68,12 +70,41 @@ async function processHeicImage(filename: string): Promise<string> {
       quality: 0.92,
     });
     fs.writeFileSync(outputPath, Buffer.from(outputBuffer));
-    console.log(`[Photo Manifest] ✓ Converted ${filename}`);
-  } else {
-    console.log(`[Photo Manifest] ⚡ Using cached conversion for ${filename}`);
   }
 
-  return `/photos/.converted/${convertedFilename}`;
+  return outputPath;
+}
+
+/**
+ * Resizes and compresses any image to an 800px WebP thumbnail with caching.
+ * Reduces 15MB 4000x3000 photos to ~40KB without any visible loss in Polaroid frame.
+ */
+async function processOptimizedImage(sourcePath: string, baseName: string): Promise<string> {
+  if (!fs.existsSync(OPTIMIZED_DIR)) {
+    fs.mkdirSync(OPTIMIZED_DIR, { recursive: true });
+  }
+
+  const targetFilename = `${baseName}.webp`;
+  const targetPath = path.join(OPTIMIZED_DIR, targetFilename);
+
+  const sourceStat = fs.statSync(sourcePath);
+  const needsOptimization =
+    !fs.existsSync(targetPath) || fs.statSync(targetPath).mtimeMs < sourceStat.mtimeMs;
+
+  if (needsOptimization) {
+    try {
+      await sharp(sourcePath)
+        .rotate() // Auto-orient based on EXIF tag
+        .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toFile(targetPath);
+    } catch (err) {
+      console.warn(`[Photo Manifest] Failed to optimize ${sourcePath}, falling back to original:`, err);
+      return `/photos/${path.basename(sourcePath)}`;
+    }
+  }
+
+  return `/photos/.optimized/${targetFilename}`;
 }
 
 export async function generatePhotoManifest(): Promise<PhotoManifestItem[]> {
@@ -86,7 +117,7 @@ export async function generatePhotoManifest(): Promise<PhotoManifestItem[]> {
 
   const entries = fs.readdirSync(PHOTOS_DIR);
   const imageFiles = entries.filter((file) => {
-    // Ignore hidden directories like .converted
+    // Ignore hidden directories like .converted and .optimized
     if (file.startsWith(".")) return false;
     const ext = path.extname(file).toLowerCase();
     return SUPPORTED_EXTENSIONS.has(ext);
@@ -99,7 +130,7 @@ export async function generatePhotoManifest(): Promise<PhotoManifestItem[]> {
     return [];
   }
 
-  console.log(`[Photo Manifest] Found ${imageFiles.length} image files. Reading EXIF metadata...`);
+  console.log(`[Photo Manifest] Found ${imageFiles.length} image files. Reading EXIF metadata & optimizing...`);
 
   const datedPhotos: Array<{ filename: string; src: string; date: Date }> = [];
   const undatedPhotos: Array<{ filename: string; src: string }> = [];
@@ -108,19 +139,23 @@ export async function generatePhotoManifest(): Promise<PhotoManifestItem[]> {
     const filePath = path.join(PHOTOS_DIR, filename);
     const ext = path.extname(filename).toLowerCase();
     const isHeic = ext === ".heic" || ext === ".heif";
+    const baseName = path.parse(filename).name;
 
-    // 1. Resolve web-accessible src (converting HEIC if needed)
-    let webSrc = `/photos/${filename}`;
+    // 1. If HEIC, convert to JPEG first
+    let sourcePathForOptimization = filePath;
     if (isHeic) {
       try {
-        webSrc = await processHeicImage(filename);
+        sourcePathForOptimization = await processHeicImage(filename);
       } catch (convErr) {
         console.error(`[Photo Manifest] ❌ Error converting HEIC file ${filename}:`, convErr);
         continue;
       }
     }
 
-    // 2. Extract capture date from the original image file
+    // 2. Generate optimized WebP thumbnail (max 800px, ~40KB)
+    const webSrc = await processOptimizedImage(sourcePathForOptimization, baseName);
+
+    // 3. Extract original capture date from source file
     const captureDate = await extractCaptureDate(filePath);
 
     if (captureDate) {
